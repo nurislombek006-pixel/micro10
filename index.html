@@ -1,0 +1,328 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тренажер по Микроэкономике</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --accent-blue: #1a73e8;
+            --text-main: #202124;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; display: flex; flex-direction: column; min-height: 100vh; align-items: center; justify-content: center; box-sizing: border-box; }
+        .card { background: var(--card-bg); max-width: 500px; width: 100%; padding: 30px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); border: 1px solid #eee; text-align: center; box-sizing: border-box; margin: 0 auto; }
+        .lock-input { padding: 15px; border: 2px solid #dadce0; border-radius: 12px; width: 100%; box-sizing: border-box; font-size: 1.1em; text-align: center; margin-bottom: 15px; outline: none; text-transform: uppercase; }
+        .lock-btn { background: #1a73e8; color: white; border: none; padding: 15px; width: 100%; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 1.1em; transition: 0.2s; }
+        .lock-btn:hover { filter: brightness(0.95); }
+        .hidden { display: none !important; }
+        .user-info { font-size: 0.9em; color: #5f6368; margin-bottom: 20px; }
+        #error-msg { color: #d93025; font-size: 0.9em; margin-top: 10px; min-height: 1.2em; font-weight: bold; }
+        
+        /* Стили тренажера */
+        .trainer-card { max-width: 850px; text-align: left; }
+        h1 { color: var(--accent-blue); text-align: center; margin-top: 0; }
+        .setting-item { margin: 15px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        input[type="number"], select { padding: 8px; border: 1px solid #ccc; border-radius: 6px; width: 90px; }
+        .q-text { font-size: 1.25em; font-weight: bold; margin-bottom: 15px; color: #202124; }
+        .options { list-style: none; padding: 0; margin: 0; }
+        .options li { background: #fff; border: 2px solid #dadce0; padding: 12px 18px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .options li:hover { border-color: var(--accent-blue); background: #f8f9fa; }
+        .options li.correct { background: #e6f4ea !important; border-color: #34a853 !important; color: #137333; font-weight: bold; }
+        .options li.wrong { background: #fce8e6 !important; border-color: #ea4335 !important; color: #c5221f; }
+        .options li.disabled { pointer-events: none; }
+        .timer { font-size: 1.8em; font-weight: bold; color: #d93025; text-align: center; margin-bottom: 20px; }
+        .btn { display: block; width: 100%; padding: 15px; border: none; border-radius: 8px; font-size: 1.1em; cursor: pointer; transition: 0.3s; margin-top: 15px; font-weight: bold; color: white; text-align: center; text-decoration: none; }
+        .btn-primary { background: #1a73e8; }
+        .btn-secondary { background: #5f6368; }
+        .btn-study { background: #f9ab00; }
+        .study-item { border-bottom: 2px solid #f1f3f4; padding: 20px 0; }
+        .study-ans { color: #34a853; font-weight: bold; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="lock-screen">
+    <div class="card">
+        <h1>🔐 Активация</h1>
+        <div id="tg-name" class="user-info">Загрузка профиля...</div>
+        <input type="text" id="access-key" class="lock-input" placeholder="Введите ваш ключ">
+        <button class="lock-btn" onclick="activateKey()">АКТИВИРОВАТЬ</button>
+        <div id="error-msg"></div>
+    </div>
+</div>
+
+<div id="start-screen" class="card trainer-card hidden">
+    <h1>Тренажер по Микроэкономике</h1>
+    <div class="setting-item"><span>Время (0-9999 сек):</span><input type="number" id="cfg-time" value="1200"></div>
+    <div class="setting-item"><span>Количество вопросов в тесте:</span><input type="number" id="cfg-count" value="24"></div>
+    <div class="setting-item"><span>Диапазон вопросов (с - по):</span><div><input type="number" id="cfg-start" value="1"> <input type="number" id="cfg-end" value="100"></div></div>
+    <div class="setting-item"><span>Порядок:</span><select id="cfg-order"><option value="random">Случайный</option><option value="list">По порядку</option></select></div>
+    
+    <button class="btn btn-primary" onclick="initTest(true)">Начать тест с таймером</button>
+    <button class="btn btn-secondary" onclick="initTest(false)">Режим обучения (без времени)</button>
+    <button class="btn btn-study" onclick="initStudy()">Изучить базу вопросов</button>
+</div>
+
+<div id="test-screen" class="card trainer-card hidden">
+    <div id="timer-display" class="timer">00:00</div>
+    <div id="progress" style="text-align:center; color:#5f6368; margin-bottom:15px;"></div>
+    <div class="question-box">
+        <div id="q-text" class="q-text"></div>
+        <ul id="q-options" class="options"></ul>
+    </div>
+    <button id="next-btn" class="btn btn-primary hidden" onclick="handleNext()">Далее</button>
+</div>
+
+<div id="study-screen" class="card trainer-card hidden">
+    <h1>Список всех вопросов и ответов</h1>
+    <div id="study-container"></div>
+    <button class="btn btn-primary" onclick="backToMenu()">Вернуться назад</button>
+</div>
+
+<div id="result-screen" class="card trainer-card hidden">
+    <h1>Результаты теста</h1>
+    <h2 id="final-score" style="text-align: center; font-size: 2.5em; margin: 20px 0;"></h2>
+    <div id="review-container"></div>
+    <button class="btn btn-primary" onclick="backToMenu()">На главную</button>
+</div>
+
+<script>
+    const TG_TOKEN = '8595875715:AAHxTY_KWyeOJCbrj7VhMk-Jz6Aq6A3XPkw';
+    const TG_CHAT_ID = '5305261101';
+    
+    const ValidKeys = [
+        'START-721', 'EXAM-449', 'STUD-991', 'PASS-302', 'TEST-885',
+        'ECON-114', 'PRO-652', 'KEY-007', 'FAST-443', 'SOLO-190'
+    ];
+
+    const database = [{"q":"К росту какой безработицы приводит недостаточный совокупный спрос?","correct":0,"a":["Циклической безработицы","Фрикционной безработицы","Структурной безработицы","Сезонной безработицы"]},{"q":"Какое уравнение гласит: 'реальная процентная ставка примерно равна номинальной минус уровень инфляции'?","correct":1,"a":["Уравнение Фридмана","Уравнение Фишера","Уравнение Кейнса","Уравнение Оукена"]},{"q":"Как определяется устойчивость государственного долга?","correct":1,"a":["Полным профицитом бюджета","Способностью государства обслуживать долг без резких изменений политики","Отсутствием внешних заимствований","Ежегодным сокращением номинала долга"]},{"q":"Если ставка процента повышается, что произойдёт с оптимальным потреблением во втором периоде?","correct":0,"a":["Потребление во втором периоде вырастет","Потребление упадет","Ставка не влияет","Потребление станет нулевым"]},{"q":"Кто является автором теории «длинных волн экономической конъюнктуры»?","correct":0,"a":["Н.Д.Кондратьев","Дж.М.Кейнс","А.Смит","М.Фридман"]},{"q":"Как графически представлен рост совокупного спроса при снижении уровня цен?","correct":0,"a":["Движением вдоль неподвижной кривой AD вниз","Сдвигом кривой AD вправо","Сдвигом кривой AD влево","Движением вдоль кривой AD вверх"]},{"q":"Как называется разница между доходами и расходами государства?","correct":0,"a":["Сальдо","Дефицит","Профицит","Баланс"]},{"q":"Как можно охарактеризовать реальный ВВП?","correct":0,"a":["Стоимость конечных товаров и услуг в ценах базисного года","Стоимость в натуральных показателях","Стоимость в текущих рыночных ценах","Сумма золотого запаса"]},{"q":"Какую модель создал Гильермо Кальво?","correct":0,"a":["Модель ступенчатого ценообразования","Модель экономического роста","Модель циклов","Модель международной торговли"]},{"q":"Каким фактором является сбережение S в модели Р.Солоу?","correct":0,"a":["Экзогенным фактором","Эндогенным фактором","Случайным фактором","Постоянным фактором"]},{"q":"На сколько изменится уровень безработицы, если ВВП упадет на 2% ниже потенциала (при коэф. Оукена = 2)?","correct":0,"a":["Вырастет на 1%","Упадет на 1%","Вырастет на 2%","Не изменится"]},{"q":"Какие показатели растут при спаде и снижаются при подъёме?","correct":0,"a":["Контрциклические","Проциклические","Ациклические","Линейные"]},{"q":"Когда возникла макроэкономика как наука?","correct":0,"a":["В XX столетии","В XVIII столетии","В XIX столетии","В XXI столетии"]},{"q":"Чему равна совокупная добавленная стоимость?","correct":0,"a":["Совокупной стоимости конечной продукции","Сумме всех продаж","Разнице между экспортом и импортом","Чистому национальному доходу"]},{"q":"Как называется инфляция, если ее уровень составляет 20% в год?","correct":0,"a":["Галопирующая","Ползучая","Гиперинфляция","Умеренная"]},{"q":"Что означает рефинансирование государственного долга?","correct":0,"a":["Замещение старых займов новыми","Отказ от выплат","Погашение долга из налогов","Продажа активов"]},{"q":"Как называется эффект реального богатства?","correct":0,"a":["Эффект Пигу","Эффект Кейнса","Эффект Фишера","Эффект Фридмана"]},{"q":"Чему равен реальный ВВП?","correct":0,"a":["Номинальный ВВП / Дефлятор ВВП","Номинальный ВВП * Инфляция","ВВП прошлых лет","Потенциальный ВВП + Сальдо"]},{"q":"Что происходит с номинальным ВВП в период инфляции?","correct":0,"a":["Он растет быстрее реального ВВП","Он растет медленнее реального ВВП","Он не меняется","Он падает"]},{"q":"Что произойдет, если объем равновесного ВВП больше потенциального уровня?","correct":0,"a":["Появится инфляционный разрыв","Появится рецессионный разрыв","Безработица вырастет","Цены упадут"}];
+    
+    let sessionQuestions = [];
+    let userAnswers = [];
+    let currentIdx = 0;
+    let score = 0;
+    let timeLeft = 0;
+    let timerInterval;
+
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    // Защита от отсутствия данных пользователя в Telegram
+    const rawUser = tg.initDataUnsafe?.user || {};
+    const user = {
+        first_name: rawUser.first_name || "Пользователь",
+        last_name: rawUser.last_name || "",
+        id: rawUser.id || "0000",
+        username: rawUser.username || "не указан"
+    };
+    const fullName = `${user.first_name} ${user.last_name}`.trim();
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById('tg-name').innerText = `Профиль: ${fullName}`;
+        
+        try {
+            const usedKey = localStorage.getItem('activated_key');
+            if (usedKey && ValidKeys.includes(usedKey)) {
+                showMainMenu();
+                sendReport(usedKey, "ВХОД ПО СТАРОМУ КЛЮЧУ");
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
+    function activateKey() {
+        const errorDiv = document.getElementById('error-msg');
+        errorDiv.innerText = "";
+        
+        const inputKey = document.getElementById('access-key').value.trim().toUpperCase();
+        
+        if (!inputKey) {
+            errorDiv.innerText = "Пожалуйста, введите ключ!";
+            return;
+        }
+
+        if (ValidKeys.includes(inputKey)) {
+            try {
+                localStorage.setItem('activated_key', inputKey);
+            } catch(e) {}
+            
+            showMainMenu();
+            sendReport(inputKey, "🔥 ПЕРВАЯ АКТИВАЦИЯ КЛЮЧА");
+        } else {
+            errorDiv.innerText = "Ключ не найден или уже использован";
+            sendAlert(inputKey, "ПОПЫТКА ПОДБОРА КЛЮЧА");
+        }
+    }
+
+    function showMainMenu() {
+        document.getElementById('lock-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.add('hidden');
+        document.getElementById('study-screen').classList.add('hidden');
+        document.getElementById('test-screen').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+    }
+
+    function backToMenu() {
+        clearInterval(timerInterval);
+        showMainMenu();
+    }
+
+    function getRange() {
+        const start = parseInt(document.getElementById('cfg-start').value) - 1;
+        const end = parseInt(document.getElementById('cfg-end').value);
+        return database.slice(Math.max(0, start), end);
+    }
+
+    function initTest(useTimer) {
+        let pool = getRange();
+        const count = parseInt(document.getElementById('cfg-count').value);
+        if (document.getElementById('cfg-order').value === 'random') pool.sort(() => Math.random() - 0.5);
+        sessionQuestions = pool.slice(0, count);
+        currentIdx = 0;
+        score = 0;
+        userAnswers = [];
+
+        if (useTimer) {
+            timeLeft = parseInt(document.getElementById('cfg-time').value);
+            startTimer();
+        } else {
+            document.getElementById('timer-display').innerText = "Режим обучения";
+        }
+
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('test-screen').classList.remove('hidden');
+        renderQuestion();
+    }
+
+    function initStudy() {
+        let pool = getRange();
+        const container = document.getElementById('study-container');
+        container.innerHTML = "";
+        
+        pool.forEach((q, i) => {
+            let div = document.createElement('div');
+            div.className = 'study-item';
+            let html = '<div><strong>' + (i + 1) + '. ' + q.q + '</strong></div>';
+            q.a.forEach((ans, idx) => {
+                let color = (idx === q.correct) ? 'style="color:#34a853; font-weight:bold;"' : '';
+                html += '<div ' + color + '>- ' + ans + (idx === q.correct ? ' (Правильно)' : '') + '</div>';
+            });
+            div.innerHTML = html;
+            container.appendChild(div);
+        });
+
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('study-screen').classList.remove('hidden');
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (timeLeft <= 0) { clearInterval(timerInterval); finishTest(); return; }
+            let m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = (m<10?'0'+m:m)+":"+(s<10?'0'+s:s);
+            timeLeft--;
+        }, 1000);
+    }
+
+    function renderQuestion() {
+        const q = sessionQuestions[currentIdx];
+        document.getElementById('progress').innerText = "Вопрос " + (currentIdx + 1) + " из " + sessionQuestions.length;
+        document.getElementById('q-text').innerText = q.q;
+        document.getElementById('next-btn').classList.add('hidden');
+        const list = document.getElementById('q-options');
+        list.innerHTML = "";
+        q.a.forEach((ans, i) => {
+            const li = document.createElement('li');
+            li.innerText = ans;
+            li.onclick = () => checkAnswer(li, i);
+            list.appendChild(li);
+        });
+    }
+
+    function checkAnswer(el, index) {
+        const q = sessionQuestions[currentIdx];
+        const allLi = document.querySelectorAll('.options li');
+        allLi.forEach(li => li.classList.add('disabled'));
+        userAnswers.push(index);
+        if (index === q.correct) {
+            el.classList.add('correct');
+            score++;
+        } else {
+            el.classList.add('wrong');
+            allLi[q.correct].classList.add('correct');
+        }
+        document.getElementById('next-btn').classList.remove('hidden');
+    }
+
+    function handleNext() {
+        currentIdx++;
+        if (currentIdx < sessionQuestions.length) renderQuestion();
+        else finishTest();
+    }
+
+    function finishTest() {
+        clearInterval(timerInterval);
+        document.getElementById('test-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        document.getElementById('final-score').innerText = score + " / " + sessionQuestions.length;
+        
+        const container = document.getElementById('review-container');
+        container.innerHTML = "<h3>Разбор полетов:</h3>";
+        sessionQuestions.forEach((q, i) => {
+            const div = document.createElement('div');
+            div.className = 'study-item';
+            const isCorrect = userAnswers[i] === q.correct;
+            div.innerHTML = '<div>' + (i+1) + '. ' + q.q + '</div>' +
+                            '<div class="study-ans">✓ Правильный: ' + q.a[q.correct] + '</div>' +
+                            (!isCorrect ? '<div style="color:#d93025">✗ Ваш ответ: ' + q.a[userAnswers[i]] + '</div>' : '');
+            container.appendChild(div);
+        });
+    }
+
+    // Безопасная отправка данных без риска заблокировать UI
+    function sendReport(key, status) {
+        try {
+            const text = `
+${status === "🔥 ПЕРВАЯ АКТИВАЦИЯ КЛЮЧА" ? "🎁 *НОВЫЙ ПОЛЬЗОВАТЕЛЬ*" : "⚡ *ПОВТОРНЫЙ ВХОД*"}
+👤 *Имя:* ${fullName}
+🆔 *ID:* ${user.id}
+🔗 *User:* @${user.username}
+🔑 *Ключ:* \`${key}\`
+📊 *Статус:* ${status}
+📱 *Платформа:* ${tg.platform || "unknown"}
+🕒 *Время:* ${new Date().toLocaleString()}
+            `.trim();
+
+            fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: text, parse_mode: 'Markdown' })
+            }).catch(e => console.log("Fetch error ignored"));
+        } catch(err) { console.error(err); }
+    }
+
+    function sendAlert(key, status) {
+        try {
+            const text = `
+⚠️ *ОШИБКА ДОСТУПА*
+👤 *Кто:* ${fullName}
+🆔 *ID:* ${user.id}
+❌ *Пытался ввести:* \`${key}\`
+📊 *Проблема:* ${status}
+            `.trim();
+
+            fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: TG_CHAT_ID, text: text, parse_mode: 'Markdown' })
+            }).catch(e => console.log("Fetch error ignored"));
+        } catch(err) { console.error(err); }
+    }
+</script>
+</body>
+</html>
